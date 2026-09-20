@@ -37,6 +37,13 @@ export default function RootHomePage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            id="nav-to-login-btn"
+            href="/login"
+            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-xs"
+          >
+            Masuk / Login
+          </Link>
           <ThemeToggle />
         </div>
       </header>

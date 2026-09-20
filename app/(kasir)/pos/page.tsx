@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   ShoppingCart,
@@ -20,52 +20,19 @@ import {
   ArrowRight,
   HardHat,
   RotateCcw,
+  Loader2,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
-
-// ==========================================
-// 1. TYPE DEFINITIONS
-// ==========================================
-interface ProductUnit {
-  name: string; // e.g. 'Sak', 'Kg', 'Batang', 'Meter', 'Pail', 'Galon'
-  price: number; // e.g. 52000
-  multiplier: number; // relative to base unit
-}
-
-interface POSProduct {
-  id: string;
-  sku: string;
-  barcode: string;
-  name: string;
-  category: string;
-  stock: number; // in base unit
-  minStock: number;
-  baseUnit: string;
-  location: string;
-  units: ProductUnit[];
-  badge?: string;
-}
-
-interface POSCartItem {
-  id: string; // unique key: `${product.id}-${selectedUnit.name}`
-  product: POSProduct;
-  selectedUnit: ProductUnit;
-  quantity: number;
-  subtotal: number;
-}
-
-interface CompletedTransaction {
-  invoiceNumber: string;
-  createdAt: string;
-  items: POSCartItem[];
-  totalAmount: number;
-  paymentMethod: 'cash' | 'qris' | 'tempo';
-  cashPaid?: number;
-  change?: number;
-  contractorName?: string;
-  downPayment?: number;
-  remainingCredit?: number;
-  dueDate?: string;
-}
+import { createClient } from '@/utils/supabase/client';
+import {
+  type POSProduct,
+  type POSCartItem,
+  type CompletedTransaction,
+  type CatalogViewRow,
+  groupCatalogRows,
+  processCheckout,
+} from '@/utils/supabase/pos';
 
 // ==========================================
 // 2. MOCK DATA TOKO BANGUNAN (MULTI-SATUAN)
@@ -279,6 +246,12 @@ function calculateFutureDateString(daysToAdd: number): string {
 // 3. KOMPONEN UTAMA POS KASIR MOBILE PWA
 // ==========================================
 export default function KasirPOSPage() {
+  // State Data Produk dari Supabase (dengan fallback MOCK_PRODUCTS)
+  const [products, setProducts] = useState<POSProduct[]>(MOCK_PRODUCTS);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSupabaseLive, setIsSupabaseLive] = useState<boolean>(false);
+  const [isSubmittingCheckout, setIsSubmittingCheckout] = useState<boolean>(false);
+
   // State Filter & Pencarian
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
@@ -308,8 +281,62 @@ export default function KasirPOSPage() {
   // Modal Struk / Nota Transaksi Berhasil
   const [completedTransaction, setCompletedTransaction] = useState<CompletedTransaction | null>(null);
 
-  // Counter transaksi lokal untuk invoice number bebas impure warning
+  // Counter transaksi lokal untuk invoice number
   const [transactionCount, setTransactionCount] = useState(108);
+
+  // Fetching Data Asli dari Supabase SQL View `pos_catalog_view`
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCatalog() {
+      setIsLoading(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('pos_catalog_view')
+          .select('*');
+
+        if (!error && data && data.length > 0) {
+          const grouped = groupCatalogRows(data as CatalogViewRow[]);
+          if (isMounted) {
+            setProducts(grouped);
+            setIsSupabaseLive(true);
+            setActiveUnits((prev) => {
+              const updated = { ...prev };
+              grouped.forEach((p) => {
+                if (!updated[p.id]) {
+                  updated[p.id] = p.units[0]?.name || p.baseUnit;
+                }
+              });
+              return updated;
+            });
+          }
+        } else {
+          // Jika view belum dibuat atau belum ada data di database, gunakan fallback mock data
+          if (isMounted) {
+            setProducts(MOCK_PRODUCTS);
+            setIsSupabaseLive(false);
+          }
+        }
+      } catch (err) {
+        console.warn('Gagal memuat katalog dari Supabase, beralih ke fallback katalog:', err);
+        if (isMounted) {
+          setProducts(MOCK_PRODUCTS);
+          setIsSupabaseLive(false);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadCatalog();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Ganti satuan aktif untuk produk tertentu
   const handleSelectUnit = (productId: string, unitName: string) => {
@@ -395,9 +422,9 @@ export default function KasirPOSPage() {
     setDueDate(calculateFutureDateString(days));
   };
 
-  // Validasi dan Penyelesaian Transaksi
-  const handleProcessTransaction = () => {
-    if (cart.length === 0) return;
+  // Validasi dan Penyelesaian Transaksi (Insert ke Supabase + Struk Nota)
+  const handleProcessTransaction = async () => {
+    if (cart.length === 0 || isSubmittingCheckout) return;
 
     if (paymentMethod === 'cash') {
       if (cashPaidNumber < totalAmount) {
@@ -417,15 +444,42 @@ export default function KasirPOSPage() {
       }
     }
 
+    setIsSubmittingCheckout(true);
     const nextCount = transactionCount + 1;
     setTransactionCount(nextCount);
 
     const now = new Date();
     const formattedDate = `${now.toLocaleDateString('id-ID', { dateStyle: 'medium' })}, ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
 
+    let generatedInvoice = `INV-TB-${String(nextCount).padStart(5, '0')}`;
+    let isSavedToDb = false;
+
+    try {
+      // Panggil fungsi kerangka INSERT ke Supabase
+      const result = await processCheckout(cart, paymentMethod, {
+        customerName: paymentMethod === 'tempo' ? selectedContractor : 'Pembeli Umum',
+        cashPaid: paymentMethod === 'cash' ? cashPaidNumber : undefined,
+        dpAmount: paymentMethod === 'tempo' ? downPaymentNumber : undefined,
+        dueDate: paymentMethod === 'tempo' ? dueDate : undefined,
+        notes:
+          paymentMethod === 'tempo'
+            ? `Proyek Kontraktor: ${selectedContractor}`
+            : undefined,
+      });
+
+      if (result.success && result.invoiceNumber) {
+        generatedInvoice = result.invoiceNumber;
+        isSavedToDb = true;
+      }
+    } catch (err) {
+      console.warn('Proses database dilewati / berjalan dalam mode offline:', err);
+    } finally {
+      setIsSubmittingCheckout(false);
+    }
+
     // Buat nota transaksi
     const newTransaction: CompletedTransaction = {
-      invoiceNumber: `INV-TB-${String(nextCount).padStart(5, '0')}`,
+      invoiceNumber: generatedInvoice,
       createdAt: formattedDate,
       items: [...cart],
       totalAmount,
@@ -436,6 +490,7 @@ export default function KasirPOSPage() {
       downPayment: paymentMethod === 'tempo' ? downPaymentNumber : undefined,
       remainingCredit: paymentMethod === 'tempo' ? remainingCredit : undefined,
       dueDate: paymentMethod === 'tempo' ? dueDate : undefined,
+      savedToDatabase: isSavedToDb,
     };
 
     setCompletedTransaction(newTransaction);
@@ -446,14 +501,14 @@ export default function KasirPOSPage() {
     setSelectedContractor('');
   };
 
-  // Filter daftar produk
-  const filteredProducts = MOCK_PRODUCTS.filter((prod) => {
+  // Filter daftar produk berdasarkan data state products
+  const filteredProducts = products.filter((prod) => {
     const matchCat =
       selectedCategory === 'Semua' || prod.category === selectedCategory;
     const matchQuery =
       prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       prod.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prod.barcode.includes(searchQuery);
+      (prod.barcode && prod.barcode.includes(searchQuery));
     return matchCat && matchQuery;
   });
 
@@ -516,13 +571,45 @@ export default function KasirPOSPage() {
             </button>
           ))}
         </div>
+
+        {/* Indikator Status Data & Total Material */}
+        <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+          <div className="flex items-center gap-1.5">
+            {isSupabaseLive ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Supabase View
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                <Database className="h-3 w-3 text-slate-400" />
+                Katalog POS (Siap Sync)
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            {filteredProducts.length} Material ({selectedCategory})
+          </span>
+        </div>
       </div>
 
       {/* ==================================================== */}
       {/* AREA DAFTAR PRODUK (MOBILE VIEW: MULTI-SATUAN CARDS) */}
       {/* ==================================================== */}
       <div className="space-y-3">
-        {filteredProducts.length === 0 ? (
+        {isLoading ? (
+          <div className="py-12 px-6 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-2xs">
+            <Loader2 className="h-7 w-7 text-amber-500 animate-spin mx-auto" />
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Memuat data material toko bangunan...
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Menghubungkan ke view pos_catalog_view di database Supabase
+              </p>
+            </div>
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
             <Layers className="h-8 w-8 text-slate-300 dark:text-slate-600 mx-auto" />
             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
@@ -1017,12 +1104,19 @@ export default function KasirPOSPage() {
                 <button
                   id="pos-process-transaction-btn"
                   type="button"
+                  disabled={isSubmittingCheckout}
                   onClick={handleProcessTransaction}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-between transition-all"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 disabled:opacity-75 disabled:cursor-not-allowed text-white font-black text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-between transition-all"
                 >
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 stroke-[2.2]" />
-                    <span>Proses Transaksi</span>
+                    {isSubmittingCheckout ? (
+                      <Loader2 className="h-5 w-5 animate-spin stroke-[2.2]" />
+                    ) : (
+                      <CheckCircle2 className="h-5 w-5 stroke-[2.2]" />
+                    )}
+                    <span>
+                      {isSubmittingCheckout ? 'Menyimpan ke Database...' : 'Proses Transaksi'}
+                    </span>
                   </div>
 
                   <span className="font-mono text-base font-extrabold">
@@ -1055,6 +1149,16 @@ export default function KasirPOSPage() {
               <div className="text-[10px] font-mono text-slate-400 pt-1">
                 {completedTransaction.invoiceNumber} • {completedTransaction.createdAt}
               </div>
+              {completedTransaction.savedToDatabase ? (
+                <div className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>Tersimpan di Supabase</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                  <span>Nota POS Lokal (Offline Ready)</span>
+                </div>
+              )}
             </div>
 
             {/* Jika Transaksi Tempo, Tampilkan Kontraktor & Jatuh Tempo */}
