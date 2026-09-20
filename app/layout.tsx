@@ -15,11 +15,15 @@ export const metadata: Metadata = {
   title: 'POS & Inventaris Toko Bangunan',
   description:
     'Aplikasi POS Kasir Mobile PWA dan Sistem Inventaris Toko Bangunan dengan arsitektur route group Next.js, Framer Motion, Dark Mode, dan integrasi Supabase.',
+  applicationName: 'NextPOS',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: 'POS Kasir',
+  },
+  formatDetection: {
+    telephone: false,
   },
   icons: {
     icon: [
@@ -60,4 +64,3 @@ export default function RootLayout({
     </html>
   );
 }
-

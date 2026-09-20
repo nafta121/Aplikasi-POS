@@ -5,3 +5,6 @@ coverage/
 *.log
 .env*
 !.env.example
+public/sw.js
+public/workbox-*.js
+public/swe-worker.js
