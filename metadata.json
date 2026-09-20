@@ -1,0 +1,6 @@
+{
+  "name": "POS & Inventaris Toko Bangunan",
+  "description": "Aplikasi POS Kasir Mobile PWA dan Sistem Inventaris Toko Bangunan dengan arsitektur route group Next.js, Framer Motion, Dark Mode, dan integrasi Supabase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
