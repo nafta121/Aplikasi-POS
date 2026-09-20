@@ -17,6 +17,7 @@ import {
 import ThemeToggle from '@/components/common/ThemeToggle';
 import PWAInstallButton from '@/components/common/PWAInstallButton';
 import { MOCK_ACTIVE_SHIFT } from '@/lib/mockData';
+import { logout } from '@/app/login/actions';
 
 interface KasirDrawerProps {
   isOpen: boolean;
@@ -106,15 +107,6 @@ export default function KasirDrawer({ isOpen, onClose }: KasirDrawerProps) {
               </div>
 
               <Link
-                href="/dashboard"
-                onClick={onClose}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-              >
-                <Monitor className="h-4 w-4 text-amber-500" />
-                <span>Buka Dashboard Admin (PC)</span>
-              </Link>
-
-              <Link
                 href="/shift"
                 onClick={onClose}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -122,6 +114,16 @@ export default function KasirDrawer({ isOpen, onClose }: KasirDrawerProps) {
                 <Clock className="h-4 w-4 text-slate-500" />
                 <span>Detail & Rekap Shift</span>
               </Link>
+
+              <form action={logout} className="pt-2">
+                <button
+                  type="submit"
+                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors text-left cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4 text-rose-500" />
+                  <span>Keluar Akun (Logout)</span>
+                </button>
+              </form>
             </div>
 
             {/* Drawer Footer: Theme & Info */}

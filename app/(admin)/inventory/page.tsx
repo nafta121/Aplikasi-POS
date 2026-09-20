@@ -1,16 +1,20 @@
 import React from 'react';
-import { fetchInventory } from './actions';
+import { fetchInventory, fetchDeliveryOrders } from './actions';
 import InventoryClientView from './InventoryClientView';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminInventoryPage() {
-  const { items, isFromSupabase } = await fetchInventory();
+  const [{ items, isFromSupabase }, deliveryOrders] = await Promise.all([
+    fetchInventory(),
+    fetchDeliveryOrders(),
+  ]);
 
   return (
     <InventoryClientView
       initialItems={items}
       initialIsFromSupabase={isFromSupabase}
+      initialDeliveryOrders={deliveryOrders}
     />
   );
 }

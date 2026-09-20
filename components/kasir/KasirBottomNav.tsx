@@ -22,7 +22,7 @@ const KASIR_TABS: NavTab[] = [
   },
   {
     name: 'Cek Stok',
-    href: '/stock',
+    href: '/cek-stok',
     icon: PackageSearch,
     emoji: '📦',
   },

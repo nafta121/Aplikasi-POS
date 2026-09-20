@@ -1,7 +1,6 @@
 import React from 'react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminHeader from '@/components/admin/AdminHeader';
-import DeviceFrameToggle from '@/components/common/DeviceFrameToggle';
 import PageTransition from '@/components/common/PageTransition';
 
 export default function AdminLayout({
@@ -11,9 +10,6 @@ export default function AdminLayout({
 }) {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans antialiased text-slate-900 dark:text-slate-100">
-      {/* Quick Switcher Tool to Jump Between Desktop Admin and Kasir Mobile PWA */}
-      <DeviceFrameToggle />
-
       {/* 1. Left Sidebar Statis (w-64) */}
       <AdminSidebar />
 

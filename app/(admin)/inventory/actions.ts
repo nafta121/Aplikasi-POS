@@ -6,10 +6,20 @@ import {
   type ProductUnitInput,
   type InventoryMaterialItem,
   type ActionResult,
+  type DeliveryOrder,
+  type DeliveryStatus,
+  type DeliveryOrderItem,
   FALLBACK_INVENTORY,
 } from './types';
 
-export type { ProductUnitInput, InventoryMaterialItem, ActionResult };
+export type {
+  ProductUnitInput,
+  InventoryMaterialItem,
+  ActionResult,
+  DeliveryOrder,
+  DeliveryStatus,
+  DeliveryOrderItem,
+};
 
 /**
  * Server Action: Mengambil data gabungan dari tabel products, product_units,
@@ -470,3 +480,207 @@ export async function seedInitialMaterialsAction(): Promise<ActionResult<{ count
     return { success: false, error: msg };
   }
 }
+
+/**
+ * Helper: Menormalkan status pengiriman ke 3 state Kanban:
+ * 'menunggu_disiapkan' | 'siap_kirim' | 'dalam_perjalanan'
+ */
+function normalizeDeliveryStatus(status: string | null | undefined): DeliveryStatus {
+  if (!status) return 'menunggu_disiapkan';
+  const s = status.toLowerCase();
+  if (s === 'menunggu' || s === 'menunggu_disiapkan' || s === 'pending') {
+    return 'menunggu_disiapkan';
+  }
+  if (s === 'siap_kirim' || s === 'ready') {
+    return 'siap_kirim';
+  }
+  if (
+    s === 'dalam_perjalanan' ||
+    s === 'on_the_way' ||
+    s === 'delivering' ||
+    s === 'kirim'
+  ) {
+    return 'dalam_perjalanan';
+  }
+  if (s === 'selesai' || s === 'delivered' || s === 'completed') {
+    return 'selesai';
+  }
+  return 'menunggu_disiapkan';
+}
+
+/**
+ * Server Action: Mengambil data aktual delivery_orders dengan JOIN ke tabel transactions
+ */
+export async function fetchDeliveryOrders(): Promise<DeliveryOrder[]> {
+  try {
+    const supabase = await createClient();
+
+    // Coba select relasional dengan JOIN ke transactions dan transaction_items
+    const { data, error } = await supabase
+      .from('delivery_orders')
+      .select(`
+        id,
+        transaction_id,
+        status,
+        driver_name,
+        vehicle_plate,
+        vehicle_type,
+        notes,
+        created_at,
+        transactions (
+          id,
+          invoice_number,
+          customer_name,
+          customer_phone,
+          notes,
+          created_at,
+          total_amount
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Gagal fetch delivery_orders dengan relasi Supabase:', error.message);
+      // Fallback query flat jika relasi FK didefinisikan berbeda
+      const { data: flatOrders, error: flatError } = await supabase
+        .from('delivery_orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (flatError || !flatOrders || flatOrders.length === 0) {
+        return [];
+      }
+
+      // Ambil data transaksi terkait secara terpisah
+      const txIds = flatOrders.map((o) => o.transaction_id).filter(Boolean);
+      const txMap = new Map<string, any>();
+      if (txIds.length > 0) {
+        const { data: txList } = await supabase
+          .from('transactions')
+          .select('id, invoice_number, customer_name, customer_phone, notes, created_at, total_amount')
+          .in('id', txIds);
+        if (txList) {
+          txList.forEach((t) => txMap.set(t.id, t));
+        }
+      }
+
+      return flatOrders.map((ord) => {
+        const tx = txMap.get(ord.transaction_id);
+        const invNumber = tx?.invoice_number || `SJ-${ord.id.slice(0, 8)}`;
+        const contractorName = tx?.customer_name || 'Pelanggan Proyek';
+        const projectAddress =
+          tx?.notes || ord.notes || 'Alamat proyek konfirmasi via telepon';
+
+        return {
+          id: ord.id,
+          transactionId: ord.transaction_id || ord.id,
+          doNumber: `SJ-${invNumber.replace('INV-', '')}`,
+          contractorName,
+          projectAddress,
+          phone: tx?.customer_phone || '-',
+          vehiclePlate: ord.vehicle_plate || 'Armada Toko',
+          vehicleType: ord.vehicle_type || 'Truk Toko Bangunan',
+          driverName: ord.driver_name || 'Driver Pengiriman',
+          createdAt: ord.created_at
+            ? new Date(ord.created_at).toLocaleString('id-ID', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })
+            : 'Baru Saja',
+          status: normalizeDeliveryStatus(ord.status),
+          notes: ord.notes || tx?.notes || '-',
+          items: [],
+        };
+      });
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    // Ambil transaction_items untuk order-order tersebut
+    const txIds = data.map((o: any) => o.transaction_id).filter(Boolean);
+    const itemsMap = new Map<string, DeliveryOrderItem[]>();
+
+    if (txIds.length > 0) {
+      const { data: rawItems } = await supabase
+        .from('transaction_items')
+        .select('transaction_id, product_name, quantity, unit_name')
+        .in('transaction_id', txIds);
+
+      if (rawItems) {
+        rawItems.forEach((it: any) => {
+          const list = itemsMap.get(it.transaction_id) || [];
+          list.push({
+            productName: it.product_name || 'Material Bangunan',
+            quantity: Number(it.quantity) || 1,
+            unit: it.unit_name || 'Unit',
+          });
+          itemsMap.set(it.transaction_id, list);
+        });
+      }
+    }
+
+    return data.map((ord: any) => {
+      const tx = Array.isArray(ord.transactions)
+        ? ord.transactions[0]
+        : ord.transactions;
+      const invNumber = tx?.invoice_number || `SJ-${ord.id.slice(0, 8)}`;
+      const contractorName = tx?.customer_name || 'Pelanggan Proyek';
+      const projectAddress =
+        tx?.notes || ord.notes || 'Alamat proyek dihubungi via telepon';
+
+      return {
+        id: ord.id,
+        transactionId: ord.transaction_id || ord.id,
+        doNumber: `SJ-${invNumber.replace('INV-', '')}`,
+        contractorName,
+        projectAddress,
+        phone: tx?.customer_phone || '-',
+        vehiclePlate: ord.vehicle_plate || 'Armada Toko',
+        vehicleType: ord.vehicle_type || 'Truk Toko Bangunan',
+        driverName: ord.driver_name || 'Driver Logistik',
+        createdAt: ord.created_at
+          ? new Date(ord.created_at).toLocaleString('id-ID', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            })
+          : 'Baru Saja',
+        status: normalizeDeliveryStatus(ord.status),
+        notes: ord.notes || tx?.notes || 'Instruksi pengiriman aman',
+        items: itemsMap.get(ord.transaction_id) || [],
+      };
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Error fetching delivery_orders from Supabase:', msg);
+    return [];
+  }
+}
+
+/**
+ * Server Action: Update status pengiriman di Supabase
+ */
+export async function updateDeliveryOrderStatusAction(
+  orderId: string,
+  newStatus: DeliveryStatus
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('delivery_orders')
+      .update({ status: newStatus })
+      .eq('id', orderId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/inventory');
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
+}
+

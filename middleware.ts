@@ -2,10 +2,13 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /**
- * Next.js Middleware untuk Memproteksi Rute Aplikasi POS & Logistik:
- * 1. Memperbarui sesi cookie Supabase melalui supabase.auth.getUser().
- * 2. Redirect paksa ke /login jika user belum login dan mencoba mengakses rute terproteksi (/pos, /inventory, /customers, /transactions).
- * 3. Mencegah user yang sudah login mengakses kembali halaman /login dengan me-redirect ke dashboard/POS.
+ * Middleware Keamanan & Proteksi Akses Berdasarkan Role (RBAC)
+ * 1. Menjaga sesi token Supabase tetap segar melalui getSession/getUser via cookies.
+ * 2. Mengamankan root URL (/): Pengguna yang belum login diarahkan ke /login, pengguna terotentikasi diarahkan sesuai role.
+ * 3. Mencegah akses persilangan (Cross-Access):
+ *    - Role 'cashier' dilarang mengakses rute admin (/inventory, /dashboard, /transactions, dll) -> dipaksa ke /pos
+ *    - Role 'admin' dilarang mengakses rute kasir (/pos, /cek-stok, /stock, /shift) -> dipaksa ke /inventory
+ * 4. Mengarahkan pengguna yang sudah login menjauhi halaman /login langsung ke dasbor masing-masing.
  */
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -22,78 +25,121 @@ export async function middleware(request: NextRequest) {
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     '';
 
-  // Jika env variable belum lengkap, lewati bypass agar halaman login tetap dapat diakses
+  // Jika kredensial Supabase belum disetel, lewati middleware
   if (!supabaseUrl || !supabaseAnonKey) {
     return supabaseResponse;
   }
 
-  // Buat server client dengan penanganan cookies untuk middleware
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
+  // Buat Supabase Server Client untuk middleware
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
       },
-    }
-  );
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        );
+        supabaseResponse = NextResponse.next({
+          request,
+        });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        );
+      },
+    },
+  });
 
-  // PENTING: Gunakan getUser() dan BUKAN getSession() untuk verifikasi otentikasi yang aman di server
+  // Ambil sesi user saat ini secara aman di server
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // Daftar rute terproteksi
-  const isProtectedRoute =
-    pathname.startsWith('/pos') ||
+  // Klasifikasi Rute Aplikasi
+  const isAdminRoute =
     pathname.startsWith('/inventory') ||
-    pathname.startsWith('/customers') ||
+    pathname.startsWith('/dashboard') ||
     pathname.startsWith('/transactions') ||
     pathname.startsWith('/employees') ||
-    pathname.startsWith('/dashboard') ||
     pathname.startsWith('/settings');
 
-  const isLoginPage = pathname === '/login';
+  const isCashierRoute =
+    pathname.startsWith('/pos') ||
+    pathname.startsWith('/cek-stok') ||
+    pathname.startsWith('/stock') ||
+    pathname.startsWith('/shift');
 
-  // 1. Jika BELUM login dan mencoba mengakses rute terproteksi -> redirect ke /login
-  if (!user && isProtectedRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.searchParams.set('redirectTo', pathname);
-    return NextResponse.redirect(url);
+  const isRootRoute = pathname === '/';
+  const isLoginRoute = pathname === '/login';
+  const isProtectedRoute = isAdminRoute || isCashierRoute || isRootRoute;
+
+  // Helper untuk redirect sembari mempertahankan cookies Supabase
+  const createRedirect = (targetPath: string, retainRedirectParam = false) => {
+    const targetUrl = request.nextUrl.clone();
+    targetUrl.pathname = targetPath;
+    targetUrl.search = '';
+
+    if (retainRedirectParam && pathname !== '/' && pathname !== '/login') {
+      targetUrl.searchParams.set('redirectTo', pathname);
+    }
+
+    const redirectResponse = NextResponse.redirect(targetUrl);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value);
+    });
+    return redirectResponse;
+  };
+
+  // ==========================================
+  // KASUS 1: PENGGUNA BELUM LOGIN (!user)
+  // ==========================================
+  if (!user) {
+    if (isProtectedRoute) {
+      return createRedirect('/login', true);
+    }
+    return supabaseResponse;
   }
 
-  // 2. Jika SUDAH login dan mencoba membuka halaman /login -> redirect sesuai role
-  if (user && isLoginPage) {
-    // Ambil role dari tabel profiles
+  // ==========================================
+  // KASUS 2: PENGGUNA SUDAH LOGIN (user ada)
+  // ==========================================
+
+  // Ambil role pengguna dari tabel 'profiles'
+  let userRole = 'cashier';
+  try {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    const targetUrl = request.nextUrl.clone();
     if (profile?.role === 'admin') {
-      targetUrl.pathname = '/inventory';
-    } else {
-      targetUrl.pathname = '/pos';
+      userRole = 'admin';
     }
-    return NextResponse.redirect(targetUrl);
+  } catch (err) {
+    console.warn('[Middleware] Gagal mengambil role profil:', err);
+  }
+
+  // 2A. Jika mencoba membuka root (/) atau /login -> arahkan ke halaman utama masing-masing
+  if (isRootRoute || isLoginRoute) {
+    if (userRole === 'admin') {
+      return createRedirect('/inventory');
+    } else {
+      return createRedirect('/pos');
+    }
+  }
+
+  // 2B. Proteksi Akses Persilangan (Cross-Access Prevention):
+  // User 'cashier' mencoba membuka halaman admin -> paksa kembali ke /pos
+  if (userRole === 'cashier' && isAdminRoute) {
+    return createRedirect('/pos');
+  }
+
+  // User 'admin' mencoba membuka halaman kasir -> paksa kembali ke /inventory
+  if (userRole === 'admin' && isCashierRoute) {
+    return createRedirect('/inventory');
   }
 
   return supabaseResponse;

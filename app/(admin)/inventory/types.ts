@@ -27,6 +27,35 @@ export interface ActionResult<T = unknown> {
   error?: string;
 }
 
+export type DeliveryStatus =
+  | 'menunggu_disiapkan'
+  | 'siap_kirim'
+  | 'dalam_perjalanan'
+  | 'selesai';
+
+export interface DeliveryOrderItem {
+  productName: string;
+  quantity: number;
+  unit: string;
+  weightEst?: string;
+}
+
+export interface DeliveryOrder {
+  id: string;
+  transactionId: string;
+  doNumber: string;
+  contractorName: string;
+  projectAddress: string;
+  phone: string;
+  vehiclePlate: string;
+  vehicleType: string;
+  driverName: string;
+  createdAt: string;
+  status: DeliveryStatus;
+  notes: string;
+  items: DeliveryOrderItem[];
+}
+
 /**
  * Fallback Material Items jika Supabase belum diisi atau sedang offline
  */

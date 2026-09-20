@@ -30,132 +30,15 @@ import {
 import {
   fetchInventory,
   seedInitialMaterialsAction,
+  fetchDeliveryOrders,
+  updateDeliveryOrderStatusAction,
 } from './actions';
-import type { InventoryMaterialItem } from './types';
+import type {
+  InventoryMaterialItem,
+  DeliveryOrder,
+  DeliveryStatus,
+} from './types';
 import MaterialFormModal from '@/components/admin/MaterialFormModal';
-
-// ==========================================
-// DELIVERY ORDER DATA TYPES & MOCK
-// ==========================================
-type DeliveryStatus = 'menunggu' | 'siap_kirim' | 'dalam_perjalanan' | 'selesai';
-
-interface DeliveryOrderItem {
-  productName: string;
-  quantity: number;
-  unit: string;
-  weightEst?: string;
-}
-
-interface DeliveryOrder {
-  id: string;
-  transactionId: string;
-  doNumber: string;
-  contractorName: string;
-  projectAddress: string;
-  phone: string;
-  vehiclePlate: string;
-  vehicleType: string;
-  driverName: string;
-  createdAt: string;
-  status: DeliveryStatus;
-  notes: string;
-  items: DeliveryOrderItem[];
-}
-
-const INITIAL_DELIVERY_ORDERS: DeliveryOrder[] = [
-  {
-    id: 'do-001',
-    transactionId: 'TRX-2026-0881',
-    doNumber: 'SJ-TB-0412',
-    contractorName: 'PT Cipta Graha Utama (Mandor Hendra)',
-    projectAddress: 'Proyek Ruko Gateway Blok B-12, Waru, Sidoarjo',
-    phone: '0812-3456-7890',
-    vehiclePlate: 'L 9821 AB',
-    vehicleType: 'Truk Engkel 6 Roda (Muatan Berat)',
-    driverName: 'Pak Joko Santoso',
-    createdAt: 'Hari ini, 08:30 WIB',
-    status: 'menunggu',
-    notes: 'Prioritas pagi, butuh akses masuk sebelum jam 11:00 WIB',
-    items: [
-      { productName: 'Semen Gresik Portland 50 Kg', quantity: 120, unit: 'Sak', weightEst: '6.000 Kg' },
-      { productName: 'Besi Beton Ulir 10mm SNI', quantity: 60, unit: 'Batang', weightEst: '445 Kg' },
-      { productName: 'Kawat Bendrat Pengikat', quantity: 4, unit: 'Roll', weightEst: '100 Kg' },
-    ],
-  },
-  {
-    id: 'do-002',
-    transactionId: 'TRX-2026-0885',
-    doNumber: 'SJ-TB-0413',
-    contractorName: 'CV Karya Mandiri (Pak Budi Handoko)',
-    projectAddress: 'Renovasi Rumah Tinggal Perum Nirwana Regency A-4, Sukolilo',
-    phone: '0813-8877-2211',
-    vehiclePlate: 'W 8123 UZ',
-    vehicleType: 'Pick-up Gran Max Bak Lebar',
-    driverName: 'Cak Slamet Riadi',
-    createdAt: 'Hari ini, 09:15 WIB',
-    status: 'menunggu',
-    notes: 'Gang perumahan sempit, gunakan pick-up kecil',
-    items: [
-      { productName: 'Semen Tiga Roda 50 Kg', quantity: 35, unit: 'Sak', weightEst: '1.750 Kg' },
-      { productName: 'Pipa Paralon PVC Rucika D 3"', quantity: 15, unit: 'Batang', weightEst: '90 Kg' },
-      { productName: 'Cat Tembok Dulux Putih 25 Kg', quantity: 3, unit: 'Pail', weightEst: '75 Kg' },
-    ],
-  },
-  {
-    id: 'do-003',
-    transactionId: 'TRX-2026-0878',
-    doNumber: 'SJ-TB-0410',
-    contractorName: 'H. Ridwan (Renovasi Masjid Al-Hikmah)',
-    projectAddress: 'Jl. Kutisari Indah Utara No. 45, Tenggilis Mejoyo',
-    phone: '0857-1122-3344',
-    vehiclePlate: 'L 8443 XY',
-    vehicleType: 'Truk Dump Pasir',
-    driverName: 'Pak Agus Supriyadi',
-    createdAt: 'Hari ini, 07:45 WIB',
-    status: 'siap_kirim',
-    notes: 'Muatan pasir cor dan semen sudah dinaikkan dan diikat rapi',
-    items: [
-      { productName: 'Pasir Pasang Cor Hitam Super Lumajang', quantity: 1, unit: 'Truk', weightEst: '6.500 Kg' },
-      { productName: 'Semen Gresik Portland 50 Kg', quantity: 50, unit: 'Sak', weightEst: '2.500 Kg' },
-    ],
-  },
-  {
-    id: 'do-004',
-    transactionId: 'TRX-2026-0872',
-    doNumber: 'SJ-TB-0408',
-    contractorName: 'PT Sinar Jaya Konstruksi',
-    projectAddress: 'Proyek Gudang Logistik Rungkut Industri III No. 19',
-    phone: '0821-9988-7766',
-    vehiclePlate: 'L 9022 UV',
-    vehicleType: 'Truk Tronton Flatbed',
-    driverName: 'Pak Wahyu Hidayat',
-    createdAt: 'Hari ini, 07:10 WIB',
-    status: 'dalam_perjalanan',
-    notes: 'Sedang melintas Merr Rungkut, estimasi tiba pukul 10:15 WIB',
-    items: [
-      { productName: 'Besi Beton Ulir 10mm SNI', quantity: 200, unit: 'Batang', weightEst: '1.480 Kg' },
-      { productName: 'Besi Beton Polos 8mm SNI', quantity: 150, unit: 'Batang', weightEst: '710 Kg' },
-    ],
-  },
-  {
-    id: 'do-005',
-    transactionId: 'TRX-2026-0865',
-    doNumber: 'SJ-TB-0405',
-    contractorName: 'Cak Agus (Mandor Renovasi Ruko)',
-    projectAddress: 'Jl. Ngagel Madya No. 8B, Gubeng, Surabaya',
-    phone: '0812-8899-0011',
-    vehiclePlate: 'W 8123 UZ',
-    vehicleType: 'Pick-up Gran Max Bak Lebar',
-    driverName: 'Cak Slamet Riadi',
-    createdAt: 'Kemarin, 16:20 WIB',
-    status: 'selesai',
-    notes: 'Surat jalan telah ditandatangani mandor penerima (Bpk. Agus)',
-    items: [
-      { productName: 'Keramik Lantai Roman 40x40 Putih', quantity: 45, unit: 'Dus', weightEst: '720 Kg' },
-      { productName: 'Semen Gresik Portland 50 Kg', quantity: 15, unit: 'Sak', weightEst: '750 Kg' },
-    ],
-  },
-];
 
 const WAREHOUSE_LOCATIONS = [
   { id: 'toko', name: 'Toko Utama (Display & Kasir)' },
@@ -165,11 +48,13 @@ const WAREHOUSE_LOCATIONS = [
 interface InventoryClientViewProps {
   initialItems: InventoryMaterialItem[];
   initialIsFromSupabase: boolean;
+  initialDeliveryOrders?: DeliveryOrder[];
 }
 
 export default function InventoryClientView({
   initialItems,
   initialIsFromSupabase,
+  initialDeliveryOrders = [],
 }: InventoryClientViewProps) {
   // 1. STATE TAB AKTIF: 'stok' | 'surat-jalan'
   const [activeTab, setActiveTab] = useState<'stok' | 'surat-jalan'>('stok');
@@ -194,8 +79,8 @@ export default function InventoryClientView({
   const [transferMemo, setTransferMemo] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 5. STATE TAB SURAT JALAN / DELIVERY ORDERS
-  const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>(INITIAL_DELIVERY_ORDERS);
+  // 5. STATE TAB SURAT JALAN / DELIVERY ORDERS DARI SUPABASE
+  const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>(initialDeliveryOrders);
   const [selectedDOForPreview, setSelectedDOForPreview] = useState<DeliveryOrder | null>(null);
 
   // 6. TRANSITION UNTUK SEED DATA AWAL
@@ -335,11 +220,11 @@ export default function InventoryClientView({
   // ==========================================
   // HANDLERS TAB 2: SURAT JALAN STATUS PROGRESSION
   // ==========================================
-  const handleAdvanceStatus = (orderId: string, currentStatus: DeliveryStatus) => {
+  const handleAdvanceStatus = async (orderId: string, currentStatus: DeliveryStatus) => {
     let nextStatus: DeliveryStatus = currentStatus;
     let successMessage = '';
 
-    if (currentStatus === 'menunggu') {
+    if (currentStatus === 'menunggu_disiapkan' || (currentStatus as string) === 'menunggu') {
       nextStatus = 'siap_kirim';
       successMessage = 'Surat Jalan berhasil dicetak! Material telah dinaikkan ke armada & siap kirim.';
     } else if (currentStatus === 'siap_kirim') {
@@ -350,11 +235,18 @@ export default function InventoryClientView({
       successMessage = 'Pengiriman selesai! Material telah diterima & ditandatangani mandor proyek.';
     }
 
+    // Optimistic update
     setDeliveryOrders((prev) =>
       prev.map((ord) => (ord.id === orderId ? { ...ord, status: nextStatus } : ord))
     );
-
     showToast(successMessage);
+
+    // Call Supabase update action
+    try {
+      await updateDeliveryOrderStatusAction(orderId, nextStatus);
+    } catch (e) {
+      console.warn('Gagal sinkronisasi update status DO ke Supabase:', e);
+    }
   };
 
   // Filter Inventory
@@ -387,7 +279,9 @@ export default function InventoryClientView({
   );
 
   // Grouping DO by status for Kanban
-  const ordersMenunggu = deliveryOrders.filter((o) => o.status === 'menunggu');
+  const ordersMenunggu = deliveryOrders.filter(
+    (o) => o.status === 'menunggu_disiapkan' || (o.status as string) === 'menunggu'
+  );
   const ordersSiapKirim = deliveryOrders.filter((o) => o.status === 'siap_kirim');
   const ordersDalamPerjalanan = deliveryOrders.filter((o) => o.status === 'dalam_perjalanan');
   const ordersSelesai = deliveryOrders.filter((o) => o.status === 'selesai');

@@ -10,10 +10,11 @@ import {
   Users,
   Settings,
   HardHat,
-  Smartphone,
+  LogOut,
   AlertTriangle,
   ChevronRight,
 } from 'lucide-react';
+import { logout } from '@/app/login/actions';
 
 interface NavItem {
   name: string;
@@ -143,16 +144,18 @@ export default function AdminSidebar() {
         </p>
       </div>
 
-      {/* Bottom Switch to Kasir Mobile Preview */}
+      {/* User Logout Button */}
       <div className="p-3 border-t border-slate-800/80 bg-slate-950/30">
-        <Link
-          id="admin-to-cashier-btn"
-          href="/pos"
-          className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-400 border border-emerald-500/30 text-xs font-medium transition-colors"
-        >
-          <Smartphone className="h-4 w-4" />
-          <span>Buka Aplikasi Kasir (PWA)</span>
-        </Link>
+        <form action={logout}>
+          <button
+            id="admin-logout-btn"
+            type="submit"
+            className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium transition-colors cursor-pointer"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Keluar Akun (Logout)</span>
+          </button>
+        </form>
       </div>
     </aside>
   );
