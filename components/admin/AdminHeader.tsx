@@ -1,28 +1,43 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Bell, MapPin, Store } from 'lucide-react';
-import ThemeToggle from '@/context/../components/common/ThemeToggle';
+import { Search, Bell, MapPin, Store, Menu } from 'lucide-react';
+import ThemeToggle from '@/components/common/ThemeToggle';
 
-export default function AdminHeader() {
+interface AdminHeaderProps {
+  onOpenSidebar?: () => void;
+}
+
+export default function AdminHeader({ onOpenSidebar }: AdminHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   return (
     <header
       id="admin-header"
-      className="h-16 flex-shrink-0 flex items-center justify-between px-6 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors z-20"
+      className="h-16 flex-shrink-0 flex items-center justify-between px-3 sm:px-6 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors z-20"
     >
-      {/* Global Search Bar */}
-      <div className="flex-1 max-w-lg">
-        <div className="relative">
+      {/* Global Search Bar with Mobile Hamburger Menu */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-lg">
+        {/* Tombol Hamburger Menu: Hanya muncul di Mobile & Tablet (< lg) */}
+        <button
+          id="admin-mobile-hamburger-btn"
+          type="button"
+          onClick={onOpenSidebar}
+          aria-label="Buka Menu Navigasi"
+          className="lg:hidden p-2 -ml-1 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+
+        <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             id="admin-global-search"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari SKU, nama material (semen, cat, besi), atau faktur..."
-            className="w-full pl-10 pr-12 py-2 text-sm bg-slate-100/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 rounded-xl border border-transparent focus:border-amber-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+            placeholder="Cari SKU, nama material, faktur..."
+            className="w-full pl-10 pr-4 sm:pr-12 py-2 text-xs sm:text-sm bg-slate-100/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 rounded-xl border border-transparent focus:border-amber-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
           />
           <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-400 bg-slate-200/80 dark:bg-slate-700/80 rounded">
             ⌘K

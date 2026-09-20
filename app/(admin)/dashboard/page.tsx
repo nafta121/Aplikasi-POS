@@ -52,8 +52,8 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* 4 Primary Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 4 Primary Metric Cards: Mobile (1 kol), Tablet (2 kol), Desktop (4 kol) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1: Total Omset Hari Ini */}
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">

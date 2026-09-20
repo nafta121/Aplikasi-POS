@@ -13,6 +13,7 @@ import {
   LogOut,
   AlertTriangle,
   ChevronRight,
+  X,
 } from 'lucide-react';
 import { logout } from '@/app/login/actions';
 
@@ -22,6 +23,11 @@ interface NavItem {
   icon: React.ElementType;
   badge?: string;
   badgeColor?: string;
+}
+
+interface AdminSidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -56,27 +62,44 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export default function AdminSidebar() {
+export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
 
   return (
     <aside
       id="admin-sidebar"
-      className="w-64 flex-shrink-0 flex flex-col bg-slate-900 text-slate-200 border-r border-slate-800 select-none"
+      className={`fixed inset-y-0 left-0 z-50 lg:static lg:z-auto w-64 flex-shrink-0 flex flex-col bg-slate-900 text-slate-200 border-r border-slate-800 select-none transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none ${
+        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}
     >
       {/* Brand Header */}
-      <div className="h-16 px-5 flex items-center gap-3 border-b border-slate-800/80 bg-slate-950/40">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20">
-          <HardHat className="h-6 w-6 text-slate-950 stroke-[2.2]" />
+      <div className="h-16 px-5 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/40">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20">
+            <HardHat className="h-6 w-6 text-slate-950 stroke-[2.2]" />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-base tracking-tight text-white truncate">
+              Mitra Bangunan
+            </span>
+            <span className="text-[11px] font-medium text-amber-400/90 tracking-wide uppercase">
+              Admin &amp; Inventaris
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col min-w-0">
-          <span className="font-bold text-base tracking-tight text-white truncate">
-            Mitra Bangunan
-          </span>
-          <span className="text-[11px] font-medium text-amber-400/90 tracking-wide uppercase">
-            Admin & Inventaris
-          </span>
-        </div>
+
+        {/* Tombol Tutup Sidebar di Mobile/Tablet */}
+        {onClose && (
+          <button
+            id="admin-sidebar-close-btn"
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup Menu Navigasi"
+            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation Section */}
@@ -96,6 +119,7 @@ export default function AdminSidebar() {
               key={item.name}
               id={`admin-nav-${item.name.toLowerCase()}`}
               href={item.href}
+              onClick={() => onClose?.()}
               className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive
                   ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20'

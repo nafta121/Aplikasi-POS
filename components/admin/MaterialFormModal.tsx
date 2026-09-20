@@ -232,19 +232,19 @@ function MaterialFormContent({
   return (
     <div
       id="material-form-modal-card"
-      className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
+      className="w-[95%] sm:w-[90%] md:max-w-2xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200"
     >
-      {/* Header Modal */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+      {/* Header Modal: Tetap di atas (shrink-0) dengan close button yang selalu terlihat */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-xs">
+          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-xs shrink-0">
             <Boxes className="h-5 w-5 stroke-[2.4]" />
           </div>
           <div>
-            <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
               {isEditMode ? 'Edit Data Material Bangunan' : 'Tambah Material Baru ke Inventaris'}
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 line-clamp-1 sm:line-clamp-none">
               {isEditMode
                 ? `Mengubah spesifikasi katalog, HPP beli, dan satuan jual SKU ${materialToEdit?.sku}`
                 : 'Daftarkan SKU produk baru, variasi harga satuan, dan HPP rahasia toko'}
@@ -257,14 +257,14 @@ function MaterialFormContent({
           type="button"
           onClick={onClose}
           disabled={isSubmitting || isDeleting}
-          className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
 
-      {/* Modal Scrollable Body */}
-      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+      {/* Modal Scrollable Body: scrollable di HP tanpa menghilangkan tombol Header/Close modal */}
+      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto max-h-[85vh] p-4 sm:p-6 space-y-6 text-xs">
         {/* Alert Error jika ada */}
         {errorMessage && (
           <div
