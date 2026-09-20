@@ -31,8 +31,8 @@ import {
   type CompletedTransaction,
   type CatalogViewRow,
   groupCatalogRows,
-  processCheckout,
 } from '@/utils/supabase/pos';
+import { processCheckoutAction } from './actions';
 
 // ==========================================
 // 2. MOCK DATA TOKO BANGUNAN (MULTI-SATUAN)
@@ -456,7 +456,7 @@ export default function KasirPOSPage() {
 
     try {
       // Panggil fungsi kerangka INSERT ke Supabase
-      const result = await processCheckout(cart, paymentMethod, {
+      const result = await processCheckoutAction(cart, paymentMethod, {
         customerName: paymentMethod === 'tempo' ? selectedContractor : 'Pembeli Umum',
         cashPaid: paymentMethod === 'cash' ? cashPaidNumber : undefined,
         dpAmount: paymentMethod === 'tempo' ? downPaymentNumber : undefined,
