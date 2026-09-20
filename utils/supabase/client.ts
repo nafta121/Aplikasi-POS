@@ -1,30 +1,20 @@
-import { createBrowserClient } from '@supabase/ssr';
+import { createBrowserClient } from "@supabase/ssr";
 
-/**
- * Utilitas Supabase Client untuk Client Components di Next.js App Router.
- * Menggunakan createBrowserClient dari @supabase/ssr.
- */
-export function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.SUPABASE_URL;
 
-  return createBrowserClient(
-    supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder-anon-key'
-  );
-}
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_PUBLISHABLE_KEY;
 
-/**
- * Cek apakah kredensial Supabase sudah terisi dengan benar (bukan placeholder)
- */
-export function isSupabaseConfigured(): boolean {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return Boolean(
-    url && 
-    key && 
-    !url.includes('xyzcompany') && 
-    !url.includes('placeholder') &&
-    key !== 'public-anon-key'
-  );
-}
+export const createClient = () => {
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      "Missing Supabase Environment Variables: NEXT_PUBLIC_SUPABASE_URL atau NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY belum disetel di .env.local."
+    );
+  }
+
+  return createBrowserClient(supabaseUrl, supabaseKey);
+};

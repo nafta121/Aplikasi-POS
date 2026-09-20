@@ -22,41 +22,76 @@ export async function login(
     return { error: 'Email dan password wajib diisi.' };
   }
 
-  const supabase = await createClient();
+  let targetRoute = '/pos';
 
-  // 1. Eksekusi sign in dengan email & password
-  const { data: authData, error: authError } =
-    await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  try {
+    const supabase = await createClient();
 
-  if (authError || !authData.user) {
+    // 1. Eksekusi sign in dengan email & password
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+    if (authError || !authData.user) {
+      return {
+        error:
+          authError?.message ||
+          'Kredensial login tidak valid. Silakan periksa kembali email dan password Anda.',
+      };
+    }
+
+    // 2. Query data role dari tabel profiles berdasarkan auth.uid()
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', authData.user.id)
+      .single();
+
+    if (!profileError && profile) {
+      if (profile.role === 'admin') {
+        targetRoute = '/inventory';
+      } else {
+        targetRoute = '/pos';
+      }
+    }
+  } catch (err: unknown) {
+    // Tangani Next.js internal redirect error agar tidak tertangkap sebagai network error
+    if (err && typeof err === 'object' && 'digest' in err) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Login Action Error]:', message);
+
+    if (
+      message.includes('fetch failed') ||
+      message.includes('ENOTFOUND') ||
+      message.includes('ECONNREFUSED') ||
+      message.includes('Failed to fetch') ||
+      message.includes('TypeError: fetch failed')
+    ) {
+      return {
+        error:
+          'Gagal menghubungi server database. Pastikan koneksi internet stabil dan file konfigurasi ENV sudah benar.',
+      };
+    }
+
+    if (message.includes('Missing Supabase Environment Variables')) {
+      return {
+        error:
+          'Konfigurasi environment Supabase belum disetel. Periksa file .env.local dan restart server Anda.',
+      };
+    }
+
     return {
       error:
-        authError?.message ||
-        'Kredensial login tidak valid. Silakan periksa kembali email dan password Anda.',
+        'Terjadi kesalahan saat memproses login: ' + (message || 'Silakan coba lagi.'),
     };
   }
 
-  // 2. Query data role dari tabel profiles berdasarkan auth.uid()
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', authData.user.id)
-    .single();
-
-  let targetRoute = '/pos'; // Fallback default untuk kasir
-
-  if (!profileError && profile) {
-    if (profile.role === 'admin') {
-      targetRoute = '/inventory';
-    } else {
-      targetRoute = '/pos';
-    }
-  }
-
-  // 3. Redirect user ke halaman dashboard/POS sesuai role
+  // 3. Redirect user ke halaman dashboard/POS sesuai role (diletakkan di luar try-catch)
   redirect(targetRoute);
 }
 
